@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Help Desk · Serval</title>
+<style>
+  :root {
+    --bg: #0f1115; --card: #171a21; --ink: #f2f4f8; --muted: #9aa3b2;
+    --line: #2a2f3a; --brand: #3b6cff; --ok: #22c55e; --warn: #f59e0b; --bad: #ef4444;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg: #f4f6fa; --card: #ffffff; --ink: #121722; --muted: #5b6474; --line: #e3e7ee; }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: transparent; color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Inter, system-ui, sans-serif; }
+  .frame { max-width: 520px; width: 100%; margin: 0 auto; aspect-ratio: 4 / 3;
+    background: var(--card); border: 1px solid var(--line); border-radius: 16px;
+    display: flex; flex-direction: column; overflow: hidden; }
+  .head { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 14px 16px; background: linear-gradient(135deg, var(--brand), color-mix(in srgb, var(--brand) 55%, #000)); color: #fff; }
+  .head h1 { margin: 0; font-size: 16px; font-weight: 650; letter-spacing: .2px; }
+  .head .sub { font-size: 12px; opacity: .85; margin-top: 2px; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600;
+    padding: 4px 9px; border-radius: 999px; background: rgba(255,255,255,.18); white-space: nowrap; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--warn); animation: pulse 1.5s ease-in-out infinite; }
+  .pill[data-s="ok"] .dot { background: var(--ok); }
+  .pill[data-s="bad"] .dot { background: var(--bad); animation: none; }
+  @keyframes pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .45; transform: scale(.8); } }
+  .body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; }
+  .desc { margin: 0; font-size: 13px; line-height: 1.45; color: var(--muted); }
+  #serval-textbox { min-height: 112px; border-radius: 12px; }
+  .notice { display: none; font-size: 12.5px; line-height: 1.5; padding: 12px; border-radius: 12px;
+    border: 1px dashed var(--line); color: var(--muted); }
+  .notice strong { color: var(--ink); }
+  .notice code { font-size: 11.5px; background: var(--bg); padding: 1px 5px; border-radius: 5px; }
+  .foot { display: flex; justify-content: space-between; gap: 8px; padding: 10px 16px;
+    border-top: 1px solid var(--line); font-size: 11.5px; color: var(--muted); }
+  .foot span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .frame.r-landscape .desc, .frame.r-landscape .foot { display: none; }
+  #serval-textbox { flex-shrink: 0; }
+  @media (max-width: 400px) { .head { padding: 12px; } .body { padding: 12px; } .head .sub, .desc { display: none; } }
+</style>
+</head>
+<body>
+<div class="frame" id="frame">
+  <div class="head">
+    <div>
+      <h1 id="title">IT &amp; HR Help Desk</h1>
+      <div class="sub" id="sub">Ask a question or raise a ticket</div>
+    </div>
+    <div class="pill" id="pill" data-s="warn"><span class="dot"></span><span id="pillTxt">Connecting…</span></div>
+  </div>
+  <div class="body">
+    <p class="desc" id="desc">Type your question below. The assistant can answer common questions instantly or open a ticket with the support team.</p>
+    <div id="serval-textbox"></div>
+    <div class="notice" id="notice"></div>
+  </div>
+  <div class="foot"><span id="who">Signed in</span><span id="loc"></span></div>
+</div>
+
+<script>
+"use strict";
+/* ---------- 1. Build-time config: paste Serval values here once known ---------- */
+const CONFIG = {
+  servalSrc: "https://widget.serval.com/loader/loader.js",
+  org: "general-motors-2",
+  authKey: "default",
+  webAppBaseUrl: "https://general-motors-2.serval.com",
+  launcher: "textbox",    // "textbox" (inline in tile) | "bubble" | "both"
+  brandName: "",
+  primaryColor: "#3b6cff",
+  title: "IT & HR Help Desk",
+  loadTimeoutMs: 10000
+};
+
+/* ---------- 2. Standard WorkJam vars ingest ---------- */
+const params = new URLSearchParams(window.location.search);
+const vars = {
+  externalLocationId:   params.get('externalLocationId')   || null,
+  externalLocationCode: params.get('externalLocationCode') || null,
+  address:              params.get('address')              || null,
+  city:                 params.get('city')                 || null,
+  stateOrProvince:      params.get('stateOrProvince')      || null,
+  country:              params.get('country')              || null,
+  zipCode:              params.get('zipCode')              || null,
+  externalRegionId:     params.get('externalRegionId')     || null,
+  externalRegionCode:   params.get('externalRegionCode')   || null,
+  employeeId:           params.get('employeeId')           || null,
+  employeeCode:         params.get('employeeCode')         || null,
+  username:             params.get('username')             || null,
+  language:             params.get('language')             || 'en',
+  aspectRatio:          params.get('aspectRatio')          || 'standard',
+  // Custom (Serval) — URL params override CONFIG
+  servalSrc:    params.get('servalSrc')    || CONFIG.servalSrc,
+  org:          params.get('org')          || CONFIG.org,
+  authKey:      params.get('authKey')      || CONFIG.authKey,
+  demo:         params.get('demo')         || null,
+  launcher:     params.get('launcher')     || CONFIG.launcher,
+  brandName:    params.get('brandName')    || CONFIG.brandName,
+  primaryColor: params.get('primaryColor') || CONFIG.primaryColor,
+  title:        params.get('title')        || CONFIG.title,
+  webAppBaseUrl: params.get('webAppBaseUrl') || CONFIG.webAppBaseUrl,
+  // loginHint: explicit param, else username if it is an email address
+  loginHint:    params.get('loginHint') || params.get('email') ||
+                (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(params.get('username') || '') ? params.get('username') : null),
+  colorScheme:  params.get('colorScheme')  || null
+};
+
+/* ---------- 3. Aspect ratio + branding ---------- */
+const RATIOS = { standard: '4 / 3', square: '1 / 1', landscape: '16 / 9', portrait: '9 / 16' };
+const ratioKey = RATIOS[vars.aspectRatio] ? vars.aspectRatio : 'standard';
+const frame = document.getElementById('frame');
+frame.style.aspectRatio = RATIOS[ratioKey];
+frame.classList.add('r-' + ratioKey);
+
+const hex = /^#?[0-9a-f]{6}$/i.test(vars.primaryColor) ? (vars.primaryColor[0] === '#' ? vars.primaryColor : '#' + vars.primaryColor) : CONFIG.primaryColor;
+document.documentElement.style.setProperty('--brand', hex);
+document.getElementById('title').textContent = vars.title;
+document.getElementById('who').textContent = vars.username ? `Signed in as ${vars.username}` : 'Support assistant';
+document.getElementById('loc').textContent = [vars.city, vars.stateOrProvince].filter(Boolean).join(', ') || (vars.externalLocationId ? `Store ${vars.externalLocationId}` : '');
+
+/* ---------- 4. Status helpers ---------- */
+const pill = document.getElementById('pill'), pillTxt = document.getElementById('pillTxt');
+const notice = document.getElementById('notice'), box = document.getElementById('serval-textbox');
+function setStatus(s, txt) { pill.dataset.s = s; pillTxt.textContent = txt; }
+function showNotice(html) { notice.innerHTML = html; notice.style.display = 'block'; box.style.display = 'none'; }
+
+/* Surface the loader's own console errors in the tile */
+const origErr = console.error.bind(console);
+console.error = (...a) => {
+  origErr(...a);
+  const msg = a.map(String).join(' ');
+  if (msg.includes('[serval-widget]')) {
+    setStatus('bad', 'Unavailable');
+    showNotice(`<strong>Help desk couldn't start.</strong><br>${msg.replace(/</g, '&lt;').slice(0, 260)}`);
+  }
+};
+
+/* ---------- 5. Mount Serval ---------- */
+(function mount() {
+  const hasAuth = (vars.org && vars.authKey) || vars.demo;
+  if (!vars.servalSrc || !hasAuth) {
+    setStatus('warn', 'Setup needed');
+    const missing = [!vars.servalSrc && 'servalSrc', !hasAuth && 'org + authKey (or demo=1)'].filter(Boolean).join(', ');
+    showNotice(`<strong>Serval isn't configured yet.</strong><br>Missing: <code>${missing}</code>.<br>Add them to the <code>CONFIG</code> block in this file, or pass them as URL parameters.`);
+    return;
+  }
+
+  const s = document.createElement('script');
+  s.src = vars.servalSrc;
+  s.async = true;
+  const d = s.dataset;
+  if (vars.org) d.org = vars.org;
+  if (vars.authKey) d.authKey = vars.authKey;
+  if (vars.demo) d.demo = vars.demo;
+  d.launcher = vars.launcher;
+  if (vars.launcher === 'textbox' || vars.launcher === 'both') d.target = '#serval-textbox';
+  else box.style.display = 'none';
+  if (vars.username) d.userName = vars.username;
+  if (vars.loginHint) d.loginHint = vars.loginHint;
+  if (vars.webAppBaseUrl) d.webAppBaseUrl = vars.webAppBaseUrl;
+  if (vars.language) d.locale = vars.language;
+  if (vars.brandName) d.brandName = vars.brandName;
+  if (vars.colorScheme) d.colorScheme = vars.colorScheme;
+  d.primaryColor = hex;
+
+  s.onerror = () => {
+    setStatus('bad', 'Unavailable');
+    showNotice(`<strong>Couldn't load the Serval script.</strong><br>Check that <code>servalSrc</code> is correct and reachable from this network.`);
+  };
+  document.body.appendChild(s);
+
+  // Confirm the assistant iframe actually appeared
+  const started = Date.now();
+  const check = setInterval(() => {
+    if (document.querySelector('iframe[title^="Serval assistant"]')) {
+      clearInterval(check);
+      if (pill.dataset.s !== 'bad') setStatus('ok', 'Online');
+    } else if (Date.now() - started > CONFIG.loadTimeoutMs) {
+      clearInterval(check);
+      if (pill.dataset.s !== 'bad') {
+        setStatus('bad', 'Timed out');
+        showNotice(`<strong>The help desk didn't respond.</strong><br>Serval may need to allow this domain: <code>${location.origin}</code>`);
+      }
+    }
+  }, 500);
+})();
+</script>
+</body>
+</html>
